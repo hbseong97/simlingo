@@ -149,6 +149,8 @@ def main(cfg: TrainConfig):
             overfit_batches=overfit,
             check_val_every_n_epoch=cfg.val_every_n_epochs,
             # val_check_interval=cfg.val_check_interval,
+            limit_train_batches=cfg.limit_train_batches,
+            limit_val_batches=cfg.limit_val_batches,
         )
 
     trainer.fit(model, data_module, ckpt_path=resume_path)

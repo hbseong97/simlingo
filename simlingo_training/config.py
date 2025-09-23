@@ -144,6 +144,8 @@ class TrainConfig:
     strategy: str = "deepspeed_stage_2" # deepspeed_stage_2 ddp
     # val_check_interval: int = 5000
     val_every_n_epochs: int = 1
+    limit_train_batches: Optional[Union[int, float]] = None
+    limit_val_batches: Optional[Union[int, float]] = None
 
     checkpoint: Optional[str] = None
 

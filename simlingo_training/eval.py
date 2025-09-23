@@ -26,6 +26,7 @@ def main(cfg: TrainConfig):
     qa_dataset = cfg.data_module.qa_dataset
     insteval_dataset = cfg.data_module.insteval_dataset
     load_path = '/mnt/raid12/cache/huggingface/hub/models--RenzKa--simlingo/snapshots/26c7c89e797d4e25bbf640013317af8da26a5454/simlingo/checkpoints/epoch=013.ckpt'
+    load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/05-45-21/checkpoints/epoch=004.ckpt'
     if load_path is not None:
         load_path_config = Path(load_path).parent.parent / '.hydra/config.yaml'
         cfg = OmegaConf.load(load_path_config)
@@ -34,13 +35,14 @@ def main(cfg: TrainConfig):
     cfg.data_module.base_dataset.bucket_path="database/bucketsv2_simlingo"
     cfg.data_module.qa_dataset = qa_dataset
     cfg.data_module.insteval_dataset = insteval_dataset
-    cfg.gpus = 2
+    cfg.gpus = 1
     cfg.data_module.num_workers = 8
     cfg.data_module.batch_size = 64
 
     print(f'Eval mode: {eval_mode}')
     print(f'Checkpoint: {load_path}')
     print(f"Using {cfg.gpus} GPUs")
+    print(f"{cfg=}")
     
     if eval_mode == "QA" or eval_mode == "commentary":
         cfg.data_module.dreamer_dataset = None
