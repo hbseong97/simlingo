@@ -133,9 +133,9 @@ class CARLA_Data(Dataset):
         # https://github.com/pytorch/pytorch/issues/13246#issuecomment-905703662
         # A workaround is to store the string lists as numpy byte objects
         # because they only have 1 refcount.
-        self.images = np.array(self.images).astype(np.string_)
-        self.boxes = np.array(self.boxes).astype(np.string_)
-        self.measurements = np.array(self.measurements).astype(np.string_)
+        self.images = np.array(self.images).astype(np.bytes_)
+        self.boxes = np.array(self.boxes).astype(np.bytes_)
+        self.measurements = np.array(self.measurements).astype(np.bytes_)
 
         self.sample_start = np.array(self.sample_start)
         print(f'[{split} samples]: Loading {len(self.images)} images from {self.data_path}')

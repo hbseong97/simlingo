@@ -1,6 +1,3 @@
 
 defaults:
   - driving
-
-train_partitions:
-  all: 0.00001

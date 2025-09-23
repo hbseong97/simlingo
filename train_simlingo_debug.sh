@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=slv2
+#SBATCH --job-name=slv2_debug
 #SBATCH --nodes=1
 #SBATCH --time=3-00:00
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=100G
-#SBATCH --output=logs/slv2_%a_%A.out  # File to which STDOUT will be written
-#SBATCH --error=logs/slv2_%a_%A.err   # File to which STDERR will be written
-#SBATCH --partition=a100
+#SBATCH --output=logs/slv2_debug_%a_%A.out  # File to which STDOUT will be written
+#SBATCH --error=logs/slv2_debug_%a_%A.err   # File to which STDERR will be written
+#SBATCH --partition=h100
 
 # print info about current job
 scontrol show job $SLURM_JOB_ID
@@ -29,4 +29,4 @@ export NCCL_DEBUG=INFO
 
 export OMP_NUM_THREADS=64 # Limits pytorch to spawn at most num cpus cores threads
 export OPENBLAS_NUM_THREADS=1  # Shuts off numpy multithreading, to avoid threads spawning other threads.
-WANDB__SERVICE_WAIT=300 python simlingo_training/train.py experiment=debug data_module.batch_size=8 gpus=1 name=simlingo_seed1
+WANDB__SERVICE_WAIT=300 HYDRA_FULL_ERROR=1 python simlingo_training/train.py experiment=debug data_module.batch_size=8 gpus=1 name=simlingo_seed1

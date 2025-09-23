@@ -337,11 +337,11 @@ class BaseDataset(Dataset):  # pylint: disable=locally-disabled, invalid-name
         # https://github.com/pytorch/pytorch/issues/13246#issuecomment-905703662
         # A workaround is to store the string lists as numpy byte objects
         # because they only have 1 refcount.
-        self.images = np.array(self.images).astype(np.string_)
-        self.boxes = np.array(self.boxes).astype(np.string_)
-        self.measurements = np.array(self.measurements).astype(np.string_)
+        self.images = np.array(self.images).astype(np.bytes_)
+        self.boxes = np.array(self.boxes).astype(np.bytes_)
+        self.measurements = np.array(self.measurements).astype(np.bytes_)
         if dreamer:
-            self.alternative_trajectories = np.array(self.alternative_trajectories).astype(np.string_)
+            self.alternative_trajectories = np.array(self.alternative_trajectories).astype(np.bytes_)
 
         self.sample_start = np.array(self.sample_start)
         # if rank == 0:
