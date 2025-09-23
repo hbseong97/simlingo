@@ -555,6 +555,8 @@ def main():
     parser.add_argument("--gpu-rank", type=int, default=0)
     arguments = parser.parse_args()
 
+    print(f"{arguments=}")
+
     statistics_manager = StatisticsManager(arguments.checkpoint, arguments.debug_checkpoint)
     leaderboard_evaluator = LeaderboardEvaluator(arguments, statistics_manager)
     crashed = leaderboard_evaluator.run(arguments)

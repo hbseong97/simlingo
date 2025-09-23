@@ -25,14 +25,16 @@ def main(cfg: TrainConfig):
 
     qa_dataset = cfg.data_module.qa_dataset
     insteval_dataset = cfg.data_module.insteval_dataset
-    load_path = '/YOUR_PATH/outputs/simlingo/checkpoints/epoch=013.ckpt'
+    load_path = '/mnt/raid12/cache/huggingface/hub/models--RenzKa--simlingo/snapshots/26c7c89e797d4e25bbf640013317af8da26a5454/simlingo/checkpoints/epoch=013.ckpt'
     if load_path is not None:
         load_path_config = Path(load_path).parent.parent / '.hydra/config.yaml'
         cfg = OmegaConf.load(load_path_config)
     
+    cfg.data_module.base_dataset.data_path="database/simlingo"
+    cfg.data_module.base_dataset.bucket_path="database/bucketsv2_simlingo"
     cfg.data_module.qa_dataset = qa_dataset
     cfg.data_module.insteval_dataset = insteval_dataset
-    cfg.gpus = 1
+    cfg.gpus = 2
     cfg.data_module.num_workers = 8
     cfg.data_module.batch_size = 64
 

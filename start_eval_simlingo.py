@@ -23,7 +23,7 @@ def get_num_jobs(job_name, username):
     return num_running_jobs, max_num_parallel_jobs
 
 # %%
-def bash_file_bench2drive(job, port, tm_port, partition_name):
+def bash_file_bench2drive(job, port, tm_port):
     cfg = job["cfg"]
     route = job["route"]
     route_id = job["route_id"]
@@ -37,7 +37,7 @@ def bash_file_bench2drive(job, port, tm_port, partition_name):
     with open(job_file, 'w', encoding='utf-8') as rsh:
             rsh.write(f'''#!/bin/bash
 #SBATCH --job-name={cfg["agent"]}_{seed}_{cfg["benchmark"]}_{route_id}
-#SBATCH --partition={partition_name}
+#SBATCH --partition=a100
 #SBATCH -o {log_file}
 #SBATCH -e {err_file}
 #SBATCH --nodes=1
@@ -49,9 +49,8 @@ def bash_file_bench2drive(job, port, tm_port, partition_name):
 
 echo JOB ID $SLURM_JOB_ID
 
-source ~/.bashrc
-. ~/software/anaconda3/etc/profile.d/conda.sh # idk why i need to do this, bashrc should be enough
 conda activate simlingo # TODO: change to your conda env
+conda env list
 cd {cfg["repo_root"]}
 
 
@@ -171,18 +170,18 @@ def kill_dead_jobs(jobs):
 configs = [
     {
     "agent": "simlingo",
-    "checkpoint": "/PATH/TO/REPO/outputs/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt",
+    "checkpoint": "/mnt/raid12/cache/huggingface/hub/models--RenzKa--simlingo/snapshots/26c7c89e797d4e25bbf640013317af8da26a5454/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt",
     "benchmark": "bench2drive",
-    "route_path": "/PATH/TO/REPO/leaderboard/data/bench2drive_split",
-    "seeds": [1,2,3], # TODO: change depending on how many eval seeds you wanna run (paper uses one eval seed on three train seeds)
+    "route_path": "/mnt/raid12/scratch/simlingo/leaderboard/data/bench2drive_split",
+    "seeds": [1], # TODO: change depending on how many eval seeds you wanna run (paper uses one eval seed on three train seeds)
     "tries": 2,
-    "out_root": "/PATH/TO/REPO/eval_results/Bench2Drive",
+    "out_root": "/mnt/raid12/scratch/simlingo/eval_results/Bench2Drive",
     "carla_root": "~/software/carla0915",
-    "repo_root": "/PATH/TO/REPO",
-    "agent_file": "/PATH/TO/REPO/team_code/agent_simlingo.py",
+    "repo_root": "/mnt/raid12/scratch/simlingo",
+    "agent_file": "/mnt/raid12/scratch/simlingo/team_code/agent_simlingo.py",
     "team_code": "team_code",
     "agent_config": "not_used",
-    "username": "YOUR_USERNAME"
+    "username": "haebin"
     }
     ] # TODO: change to your paths and model, you can add multiple configs here, whch get evaluated after each other
 
@@ -241,9 +240,11 @@ carla_streaming_ports = set(range(20000, 30000, 50))
 carla_tm_ports = set(range(30000, 40000, 50))
 
 # %%
+print(f"{len(job_queue)=}")
+print(f"{job_queue[0]=}")
+print(f"{job_queue[1]=}")
 jobs = len(job_queue)
 progress = tqdm(total = jobs)
-partition_name = "2080-galvani"
 while job_queue:
     kill_dead_jobs(job_queue)
     job_queue = filter_completed(job_queue)
@@ -257,8 +258,8 @@ while job_queue:
         if "job_id" in job and job["job_id"] in running_jobs:
             used_ports.update(job["ports"])
 
-    with open('max_num_jobs.txt', 'r', encoding='utf-8') as f:
-        max_num_parallel_jobs = int(f.read())
+    max_num_parallel_jobs = 5
+    print(f"{len(running_jobs)}/{max_num_parallel_jobs} jobs are running...")
 
     if len(running_jobs) >= max_num_parallel_jobs:
         time.sleep(5)
@@ -285,7 +286,7 @@ while job_queue:
         carla_tm_port_start = next(iter(carla_tm_ports.difference(used_ports)))
 
         if job["cfg"]["benchmark"].lower() == "bench2drive":
-            bash_file_bench2drive(job, carla_tm_port_start, carla_world_port_start, partition_name)
+            bash_file_bench2drive(job, carla_tm_port_start, carla_world_port_start)
             job["ports"] = {carla_world_port_start, carla_tm_port_start}
         else:
             raise NotImplementedError(f"Benchmark {job['cfg']['benchmark']} not implemented.")
