@@ -75,10 +75,22 @@ class DrivingModel(pl.LightningModule):
 
         self.all_predictions = {}
         self.all_losses = {}
-        
+
+        # Get tokenizer first (needed for resizing)
+        if 'tokenizer' in self.processor.__dict__:
+            self.tokenizer = self.processor.tokenizer
+        else:
+            self.tokenizer = self.processor
+
+        # IMPORTANT: Resize token embeddings BEFORE creating adaptors
+        # The datamodule adds special tokens like <WAYPOINTS>, <ROUTE>, etc.
+        # but the model's embedding layer still has the original vocabulary size
+        # This must be done before LanguageAdaptor is created, as it stores a reference to embed_tokens
+        self._resize_token_embeddings_if_needed()
+
         driving = None
         driving = DrivingAdaptor(
-            self.language_model.hidden_size, 
+            self.language_model.hidden_size,
             speed_wps_mode=self.speed_wps_mode,
             predict_route_as_wps=self.predict_route_as_wps,
         )
@@ -95,11 +107,62 @@ class DrivingModel(pl.LightningModule):
             # norm_layer=NormZeroOne(min_max=(-32.0, 32.0)),
         )
 
-        if 'tokenizer' in self.processor.__dict__:
-            self.tokenizer = self.processor.tokenizer
-        else:
-            self.tokenizer = self.processor
+    def _resize_token_embeddings_if_needed(self):
+        """
+        Resize the model's token embeddings if the tokenizer vocabulary size
+        is larger than the model's embedding layer size.
 
+        This is needed because the datamodule adds special tokens to the tokenizer,
+        but the model's embedding layer still has the original vocabulary size.
+        """
+        tokenizer_vocab_size = len(self.tokenizer)
+
+        # Get the actual language model (unwrap PEFT if needed)
+        language_model = self.language_model.model
+        if hasattr(language_model, 'base_model'):
+            # This is a PEFT model, get the base model
+            base_model = language_model.base_model.model
+        else:
+            base_model = language_model
+
+        # Get current embedding size
+        if hasattr(base_model, 'embed_tokens'):
+            current_embed_size = base_model.embed_tokens.num_embeddings
+        elif hasattr(base_model, 'model') and hasattr(base_model.model, 'tok_embeddings'):
+            current_embed_size = base_model.model.tok_embeddings.num_embeddings
+        else:
+            print("Warning: Could not find embedding layer to resize")
+            return
+
+        if tokenizer_vocab_size > current_embed_size:
+            print(f"Resizing token embeddings from {current_embed_size} to {tokenizer_vocab_size}")
+
+            # Resize the LLM instance (self.language_model), not the internal PEFT model
+            # This ensures that self.language_model.model.embed_tokens gets updated properly
+            if hasattr(self.language_model, 'resize_token_embeddings'):
+                self.language_model.resize_token_embeddings(tokenizer_vocab_size)
+                print("✅ Token embeddings resized successfully")
+
+                # CRITICAL: Update the LanguageAdaptor's embed_tokens reference after resizing
+                # The old reference becomes stale after resizing
+                if hasattr(self, 'adaptors') and hasattr(self.adaptors, 'language'):
+                    print(f"🔄 Updating LanguageAdaptor embed_tokens reference")
+                    old_embed_id = id(self.adaptors.language.embed_tokens.weight)
+                    old_embed_size = self.adaptors.language.embed_tokens.num_embeddings
+
+                    # Update to the new resized embedding layer
+                    self.adaptors.language.embed_tokens = self.language_model.model.embed_tokens
+
+                    new_embed_id = id(self.adaptors.language.embed_tokens.weight)
+                    new_embed_size = self.adaptors.language.embed_tokens.num_embeddings
+
+                    print(f"✅ Updated embed_tokens reference:")
+                    print(f"   Old: id={old_embed_id}, size={old_embed_size}")
+                    print(f"   New: id={new_embed_id}, size={new_embed_size}")
+            else:
+                print("Warning: Language model does not have resize_token_embeddings method")
+        else:
+            print(f"Token embeddings already correct size: {current_embed_size} >= {tokenizer_vocab_size}")
 
     def forward(self,
         example: DrivingExample,
@@ -141,12 +204,20 @@ class DrivingModel(pl.LightningModule):
                     eos = self.tokenizer.eos_token_id
 
                 # BUG: input_embeds, cot
+                # Handle tied embeddings: if lm_head is None, use embed_tokens.weight for both matrices
+                embed_weight = self.adaptors.language.embed_tokens.weight
+                if self.adaptors.language.lm_head is not None:
+                    logit_weight = self.adaptors.language.lm_head.weight
+                else:
+                    # Use tied embeddings - same weight matrix for both input and output
+                    logit_weight = embed_weight
+
                 sampled_tokens, input_embeds = self.language_model.greedy_sample(
                     input_embed,
                     eos_token_id=eos,
                     max_new_tokens=100,
-                    input_embed_matrix=self.adaptors.language.embed_tokens.weight,
-                    logit_matrix=self.adaptors.language.lm_head.weight,
+                    input_embed_matrix=embed_weight,
+                    logit_matrix=logit_weight,
                     attention_mask=attention_mask,
                     # position_ids=position_ids,
                 )
@@ -222,7 +293,17 @@ class DrivingModel(pl.LightningModule):
             return_dict=True,
         )
         features = outputs.hidden_states[-1]
-        logits = outputs[0]
+
+        # CRITICAL FIX: Qwen2Model (base model) doesn't produce logits, only hidden states
+        # outputs[0] is last_hidden_state, not logits! We need to compute logits manually.
+        # Use the embedding weights as the output projection (tied embeddings)
+        import torch.nn.functional as F
+        hidden_states = outputs.last_hidden_state  # Same as outputs[0] but more explicit
+        logits = F.linear(hidden_states, self.language_model.model.embed_tokens.weight)
+
+        print(f"DEBUG FORWARD_MODEL: hidden_states shape: {hidden_states.shape}")
+        print(f"DEBUG FORWARD_MODEL: embed_tokens.weight shape: {self.language_model.model.embed_tokens.weight.shape}")
+        print(f"DEBUG FORWARD_MODEL: computed logits shape: {logits.shape}")
 
         vision_features, adaptor_features = features.split(
             [features.size(1) - adaptor_embeds.size(1), adaptor_embeds.size(1)], dim=1

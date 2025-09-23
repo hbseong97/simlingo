@@ -26,7 +26,8 @@ def main(cfg: TrainConfig):
     qa_dataset = cfg.data_module.qa_dataset
     insteval_dataset = cfg.data_module.insteval_dataset
     load_path = '/mnt/raid12/cache/huggingface/hub/models--RenzKa--simlingo/snapshots/26c7c89e797d4e25bbf640013317af8da26a5454/simlingo/checkpoints/epoch=013.ckpt'
-    load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/05-45-21/checkpoints/epoch=004.ckpt'
+    load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/05-45-21/checkpoints/epoch=004.ckpt' # Internvl2
+    load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/12-13-14/checkpoints/epoch=002.ckpt' # Internvl3
     if load_path is not None:
         load_path_config = Path(load_path).parent.parent / '.hydra/config.yaml'
         cfg = OmegaConf.load(load_path_config)
@@ -72,6 +73,18 @@ def main(cfg: TrainConfig):
         processor = AutoTokenizer.from_pretrained(cfg.model.language_model.variant, trust_remote_code=True, use_fast=False)
     else:
         processor = AutoProcessor.from_pretrained(cfg.model.language_model.variant, trust_remote_code=True, use_fast=False)
+
+    # CRITICAL FIX: Add the same special tokens as in training to ensure vocabulary size matches
+    # This ensures both the datamodule and model use the same tokenizer with special tokens
+    if 'tokenizer' in processor.__dict__:
+        tokenizer = processor.tokenizer
+    else:
+        tokenizer = processor
+
+    # Add the same special tokens that were added in train.py
+    tokenizer.add_special_tokens({'additional_special_tokens': ['<WAYPOINTS>','<WAYPOINTS_DIFF>', '<ORG_WAYPOINTS_DIFF>', '<ORG_WAYPOINTS>', '<WAYPOINT_LAST>', '<ROUTE>', '<ROUTE_DIFF>', '<TARGET_POINT>']})
+    tokenizer.padding_side = "left"
+
     model_type_name = cfg.model.vision_model.variant.split('/')[1]
     cache_dir = f"pretrained/{(model_type_name)}"
     

@@ -225,6 +225,9 @@ class LanguageAdaptor(nn.Module):
     def __init__(self, language_model):
         super().__init__()
         self.embed_tokens = language_model.model.embed_tokens
+        self.lm_head = None
+
+        # Check for different lm_head configurations
         if hasattr(language_model.model, "lm_head"):
             self.lm_head = language_model.model.lm_head
         elif hasattr(language_model.model, "embed_out"):
@@ -232,7 +235,70 @@ class LanguageAdaptor(nn.Module):
         elif hasattr(language_model.model.base_model.model, 'output'):
             self.lm_head = language_model.model.base_model.model.output
         else:
-            raise ValueError("Language model must have `lm_head` or `embed_out` attribute.")
+            # Get the actual model (handle PEFT wrapper if present)
+            actual_model = language_model.model
+            if hasattr(actual_model, 'base_model'):
+                # This is a PEFT model, get the base model
+                # For InternVL + PEFT: actual_model is PeftModel, base_model is Qwen2ForCausalLM
+                peft_base_model = actual_model.base_model
+                # The Qwen2ForCausalLM has both .model (Qwen2Model) and .lm_head
+                if hasattr(peft_base_model, 'model'):
+                    qwen2_model = peft_base_model.model  # This is the Qwen2Model with embed_tokens, layers, etc.
+                else:
+                    qwen2_model = peft_base_model
+            else:
+                peft_base_model = actual_model
+                qwen2_model = actual_model
+
+            # Check if the model uses tied embeddings (like Qwen2 models)
+            # ref: https://skyzh.github.io/tiny-llm/week1-05-qwen2-model.html#task-3-implement-qwen2modelweek1
+            # According to the documentation: if tie_word_embeddings is True, use Embedding::as_linear
+            # Otherwise, there should be a separate lm_head layer
+            config = None
+            if hasattr(qwen2_model, 'config'):
+                config = qwen2_model.config
+            elif hasattr(peft_base_model, 'config'):
+                config = peft_base_model.config
+            elif hasattr(actual_model, 'config'):
+                config = actual_model.config
+
+            if config and hasattr(config, 'tie_word_embeddings'):
+                if config.tie_word_embeddings:
+                    # For models like Qwen2-0.5b that use tied embeddings
+                    self.lm_head = None  # Will use embed_tokens.weight as linear layer
+                else:
+                    # For models like Qwen2-7b that should have a separate lm_head
+                    # Try to find the lm_head in different possible locations
+                    # The lm_head should be at the same level as the Qwen2Model (in the Qwen2ForCausalLM)
+                    if hasattr(peft_base_model, "lm_head"):
+                        self.lm_head = peft_base_model.lm_head
+                    elif hasattr(actual_model, "lm_head"):
+                        self.lm_head = actual_model.lm_head
+                    elif hasattr(qwen2_model, "lm_head"):
+                        self.lm_head = qwen2_model.lm_head
+                    elif hasattr(peft_base_model, "_modules") and "lm_head" in peft_base_model._modules:
+                        self.lm_head = peft_base_model._modules["lm_head"]
+                    elif hasattr(actual_model, "_modules") and "lm_head" in actual_model._modules:
+                        self.lm_head = actual_model._modules["lm_head"]
+                    elif hasattr(qwen2_model, "_modules") and "lm_head" in qwen2_model._modules:
+                        self.lm_head = qwen2_model._modules["lm_head"]
+                    else:
+                        # Special case: InternVL extracts only Qwen2Model (not Qwen2ForCausalLM)
+                        # Even though config says tie_word_embeddings=False, there's no lm_head available
+                        # So we fall back to using tied embeddings (embed_tokens.weight)
+                        print("Warning: Model config indicates separate lm_head (tie_word_embeddings=False) "
+                              "but no lm_head found. Falling back to tied embeddings.")
+                        self.lm_head = None  # Will use embed_tokens.weight as linear layer
+            elif hasattr(language_model.model, "embed_tokens"):
+                # Fallback: assume tied embeddings if embed_tokens exists but no lm_head found
+                self.lm_head = None  # Will use embed_tokens.weight as linear layer
+            else:
+                raise ValueError(
+                    f"Language model must have `lm_head`, `embed_out`, or `embed_tokens` attribute. "
+                    f"Qwen2Model attributes: {list(qwen2_model.__dict__.keys())}, "
+                    f"PEFT base model attributes: {list(peft_base_model.__dict__.keys())}, "
+                    f"Actual model attributes: {list(actual_model.__dict__.keys())}"
+                )
 
 
     def forward(self, example: DrivingExample, inference=False, **kwargs) -> Dict[str, Tensor]:
@@ -261,13 +327,65 @@ class LanguageAdaptor(nn.Module):
     ) -> Dict[str, Tuple[Tensor, Tensor]]:
         del example
 
+        print(f"DEBUG COMPUTE_LOSS: adaptor_logits is None: {adaptor_logits is None}")
+        if adaptor_logits is not None:
+            print(f"DEBUG COMPUTE_LOSS: adaptor_logits shape: {adaptor_logits.shape}")
+            print(f"DEBUG COMPUTE_LOSS: adaptor_logits passed in from outside!")
+
         if adaptor_logits is None:
-            adaptor_logits = self.lm_head(outputs[:, :-1])
+            print(f"DEBUG BRANCH: lm_head is None: {self.lm_head is None}")
+            print(f"DEBUG BRANCH: lm_head type: {type(self.lm_head)}")
+            if self.lm_head is not None:
+                print(f"DEBUG LM_HEAD: Using lm_head for output projection")
+                print(f"DEBUG LM_HEAD: lm_head type: {type(self.lm_head)}")
+                if hasattr(self.lm_head, 'weight'):
+                    print(f"DEBUG LM_HEAD: lm_head.weight shape: {self.lm_head.weight.shape}")
+                adaptor_logits = self.lm_head(adaptor_features[:, :-1])
+                print(f"DEBUG LM_HEAD: adaptor_logits shape: {adaptor_logits.shape}")
+            else:
+                # Use embed_tokens.weight as output projection (weight tying)
+                print(f"DEBUG F.LINEAR: Using embed_tokens.weight for output projection")
+                features_input = adaptor_features[:, :-1]
+                print(f"DEBUG F.LINEAR: features_input shape: {features_input.shape}")
+                print(f"DEBUG F.LINEAR: embed_tokens.weight shape: {self.embed_tokens.weight.shape}")
+                print(f"DEBUG F.LINEAR: embed_tokens.weight id: {id(self.embed_tokens.weight)}")
+
+                adaptor_logits = F.linear(features_input, self.embed_tokens.weight)
+                print(f"DEBUG F.LINEAR: adaptor_logits shape: {adaptor_logits.shape}")
+                print(f"DEBUG F.LINEAR: Expected shape should be: [{features_input.shape[0]}, {features_input.shape[1]}, {self.embed_tokens.weight.shape[0]}]")
         else:
             adaptor_logits = adaptor_logits[:, :-1]
         labels = torch.where(inputs["_ids_mask"], inputs["_ids"], -1)
         # Shift by 1 for next token prediction
         labels = labels[:, 1:]
+
+        # DEBUG: Print debug info before cross-entropy loss
+        print(f"DEBUG: adaptor_logits shape: {adaptor_logits.shape}")
+        print(f"DEBUG: labels shape: {labels.shape}")
+        print(f"DEBUG: labels max: {labels.max().item()}")
+        print(f"DEBUG: labels min: {labels.min().item()}")
+        print(f"DEBUG: vocab size (logits): {adaptor_logits.shape[-1]}")
+        print(f"DEBUG: embed_tokens size: {self.embed_tokens.num_embeddings}")
+        print(f"DEBUG: embed_tokens.weight shape: {self.embed_tokens.weight.shape}")
+        print(f"DEBUG: embed_tokens.weight id: {id(self.embed_tokens.weight)}")
+
+        # Check for out-of-bounds labels
+        valid_labels = labels[labels != -1]
+        if len(valid_labels) > 0:
+            out_of_bounds = valid_labels >= adaptor_logits.shape[-1]
+            if out_of_bounds.any():
+                oob_labels = valid_labels[out_of_bounds].unique()
+                print(f"DEBUG: ⚠️  OUT-OF-BOUNDS LABELS: {oob_labels.tolist()}")
+                print(f"DEBUG: Max valid label: {adaptor_logits.shape[-1] - 1}")
+
+                # Also check against embed_tokens size
+                out_of_bounds_embed = valid_labels >= self.embed_tokens.num_embeddings
+                if out_of_bounds_embed.any():
+                    oob_embed_labels = valid_labels[out_of_bounds_embed].unique()
+                    print(f"DEBUG: ⚠️  OUT-OF-BOUNDS vs EMBED_TOKENS: {oob_embed_labels.tolist()}")
+                else:
+                    print(f"DEBUG: ✅ All labels are within embed_tokens bounds")
+
         language_loss = F.cross_entropy(
             adaptor_logits.flatten(0, -2), labels.flatten(), ignore_index=-1, reduction="none"
         ).view_as(labels)

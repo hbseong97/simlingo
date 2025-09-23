@@ -106,10 +106,10 @@ class LLM(nn.Module):
         if self.lora:
             from peft import get_peft_model
             from peft import LoraConfig
-            
+
             print('Using PEFT model')
             peft_config = LoraConfig(
-                inference_mode=False, 
+                inference_mode=False,
                 r=self.lora_r,
                 lora_alpha=self.lora_alpha,
                 lora_dropout=self.lora_dropout,
@@ -117,6 +117,56 @@ class LLM(nn.Module):
             )
             self.model = get_peft_model(self.model, peft_config)
             self.model.print_trainable_parameters()
+
+    def resize_token_embeddings(self, new_num_tokens):
+        """
+        Resize the token embeddings and update the embed_tokens reference.
+
+        This is needed because the LLM class creates its own embed_tokens reference
+        (lines 91-93) which needs to be updated after resizing.
+        """
+        print(f"DEBUG RESIZE: Before resize - embed_tokens shape: {self.model.embed_tokens.weight.shape}")
+        print(f"DEBUG RESIZE: Before resize - embed_tokens id: {id(self.model.embed_tokens.weight)}")
+
+        # Resize the underlying PEFT model
+        if hasattr(self.model, 'resize_token_embeddings'):
+            self.model.resize_token_embeddings(new_num_tokens)
+            print(f"DEBUG RESIZE: PEFT model resized successfully")
+        else:
+            raise ValueError("Model does not have resize_token_embeddings method")
+
+        print(f"DEBUG RESIZE: After PEFT resize - embed_tokens shape: {self.model.embed_tokens.weight.shape}")
+        print(f"DEBUG RESIZE: After PEFT resize - embed_tokens id: {id(self.model.embed_tokens.weight)}")
+
+        # Check if there's an lm_head and its size
+        if hasattr(self.model, 'lm_head') and self.model.lm_head is not None:
+            print(f"DEBUG RESIZE: lm_head exists - shape: {self.model.lm_head.weight.shape}")
+        else:
+            print(f"DEBUG RESIZE: No lm_head found - using tied embeddings")
+
+        # Update the embed_tokens reference to point to the resized embeddings
+        if 'internvl' in self.variant.lower():
+            try:
+                old_embed_tokens_id = id(self.model.embed_tokens.weight)
+                self.model.embed_tokens = self.model.base_model.embed_tokens
+                new_embed_tokens_id = id(self.model.embed_tokens.weight)
+                print(f"DEBUG RESIZE: Updated embed_tokens reference (base_model.embed_tokens)")
+                print(f"DEBUG RESIZE: Old weight id: {old_embed_tokens_id}, New weight id: {new_embed_tokens_id}")
+                print(f"DEBUG RESIZE: Final embed_tokens shape: {self.model.embed_tokens.weight.shape}")
+            except Exception as e:
+                print(f"DEBUG RESIZE: Failed to use base_model.embed_tokens: {e}")
+                old_embed_tokens_id = id(self.model.embed_tokens.weight)
+                self.model.embed_tokens = self.model.model.tok_embeddings
+                new_embed_tokens_id = id(self.model.embed_tokens.weight)
+                print(f"DEBUG RESIZE: Updated embed_tokens reference (model.tok_embeddings)")
+                print(f"DEBUG RESIZE: Old weight id: {old_embed_tokens_id}, New weight id: {new_embed_tokens_id}")
+                print(f"DEBUG RESIZE: Final embed_tokens shape: {self.model.embed_tokens.weight.shape}")
+        else:
+            # For other model types, update accordingly
+            if hasattr(self.model, 'base_model') and hasattr(self.model.base_model, 'embed_tokens'):
+                self.model.embed_tokens = self.model.base_model.embed_tokens
+            elif hasattr(self.model, 'model') and hasattr(self.model.model, 'embed_tokens'):
+                self.model.embed_tokens = self.model.model.embed_tokens
 
         self.vocab_size = self.model.config.vocab_size
         self.hidden_size = self.model.config.hidden_size

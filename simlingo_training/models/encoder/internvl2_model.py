@@ -6,6 +6,7 @@ from transformers import AutoModel
 class LingoInternVLModel(nn.Module):
     def __init__(self, variant, *args, **kwargs):
         super().__init__()
+        self.variant = variant  # Store variant to determine API to use
         self.model = AutoModel.from_pretrained(variant, trust_remote_code=True)
         try:
             self.num_embeddings = self.model.language_model.model.embed_tokens.num_embeddings
@@ -111,8 +112,18 @@ class LingoInternVLModel(nn.Module):
                         # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
                         raise ValueError(f"pixel_values of shape {pixel_values_tmp.shape}, expect to be of 4 or 5 dimensions")
                     
-                    image_features = self.model.extract_feature(pixel_values_tmp)
-                    image_features = image_features.reshape(-1, C_embed)
+                    # Use different methods for InternVL2 vs InternVL3
+                    if 'internvl3' in self.variant.lower():
+                        # InternVL3 uses get_image_features method
+                        image_features = self.model.get_image_features(pixel_values_tmp)
+                        # InternVL3 returns [batch_size, num_tokens, hidden_size]
+                        # We need to reshape to [batch_size * num_tokens, hidden_size]
+                        batch_size, num_tokens, hidden_size = image_features.shape
+                        image_features = image_features.reshape(batch_size * num_tokens, hidden_size)
+                    else:
+                        # InternVL2 uses extract_feature method
+                        image_features = self.model.extract_feature(pixel_values_tmp)
+                        image_features = image_features.reshape(-1, C_embed)
                                         
                     all_image_features.append(image_features)
 

@@ -8,6 +8,7 @@
 #SBATCH --output=logs/eval_slv2_%a_%A.out  # File to which STDOUT will be written
 #SBATCH --error=logs/eval_slv2_%a_%A.err   # File to which STDERR will be written
 #SBATCH --partition=h100
+#SBATCH --nodelist=DGX-H100-11
 
 # print info about current job
 scontrol show job $SLURM_JOB_ID

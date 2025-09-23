@@ -30,11 +30,23 @@ def main(cfg: TrainConfig):
     cfg.wandb_name = f"{cfg.wandb_name}_{cfg.name}"
     
     processor = AutoProcessor.from_pretrained(cfg.model.vision_model.variant, trust_remote_code=True)
+
+    # CRITICAL: Add special tokens to the processor BEFORE passing it to datamodule and model
+    # This ensures both the datamodule and model use the same tokenizer with special tokens
+    if 'tokenizer' in processor.__dict__:
+        tokenizer = processor.tokenizer
+    else:
+        tokenizer = processor
+
+    # Add the same special tokens that were previously added in datamodule
+    tokenizer.add_special_tokens({'additional_special_tokens': ['<WAYPOINTS>','<WAYPOINTS_DIFF>', '<ORG_WAYPOINTS_DIFF>', '<ORG_WAYPOINTS>', '<WAYPOINT_LAST>', '<ROUTE>', '<ROUTE_DIFF>', '<TARGET_POINT>']})
+    tokenizer.padding_side = "left"
+
     model_type_name = cfg.model.vision_model.variant.split('/')[1]
     cache_dir = None #f"pretrained/{(model_type_name)}"
-    
+
     data_module = hydra.utils.instantiate(
-        cfg.data_module, 
+        cfg.data_module,
         processor=processor,
         encoder_variant=cfg.model.vision_model.variant,
         llm_variant=cfg.model.language_model.variant,

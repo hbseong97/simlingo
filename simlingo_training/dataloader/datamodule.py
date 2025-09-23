@@ -59,14 +59,14 @@ class DataModule(LightningDataModule):
         self.num_image_tokens_per_patch = get_num_image_tokens_per_patch(self.encoder_variant)
         self.num_image_tokens_total = self.num_image_tokens_per_patch * self.NUM_IMAGE_PATCHES
             
-        # add <WAYPOINT> token
+        # Get tokenizer from processor (special tokens are now added in train.py)
         if 'tokenizer' in self.processor.__dict__:
             self.tokenizer = self.processor.tokenizer
         else:
             self.tokenizer = self.processor
-        # TODO: not needed anymore?
-        self.tokenizer.add_special_tokens({'additional_special_tokens': ['<WAYPOINTS>','<WAYPOINTS_DIFF>', '<ORG_WAYPOINTS_DIFF>', '<ORG_WAYPOINTS>', '<WAYPOINT_LAST>', '<ROUTE>', '<ROUTE_DIFF>', '<TARGET_POINT>']})
-        self.tokenizer.padding_side = "left"
+
+        # Special tokens are now added in train.py before the processor is passed here
+        # This ensures both datamodule and model use the same tokenizer with special tokens
 
     def setup(self, stage=None):
         if not self.predict:
@@ -244,7 +244,7 @@ class DataModule(LightningDataModule):
             images_batch_tensor = images_batch_tensor.view(BS*T, C, H, W)
             images_batch_list = list(images_batch_tensor)
 
-            if 'internvl2' in self.encoder_variant.lower():
+            if 'internvl2' in self.encoder_variant.lower() or 'internvl3' in self.encoder_variant.lower():
                 # get image patches
                 images_processed = preprocess_image_batch(images_batch_list, input_size=448, use_global_img=self.use_global_img, max_num_grid=grid_nums[idx])    
             else:

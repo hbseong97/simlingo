@@ -4,7 +4,7 @@
 import importlib.util
 import os
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -21,8 +21,23 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 def get_num_image_tokens_per_patch(encoder_variant: str) -> int:
     # we want to know how many image tokens we use so that we can adjust the batch padding
     tmp_config = AutoConfig.from_pretrained(encoder_variant, trust_remote_code=True)
-    image_size = tmp_config.force_image_size or tmp_config.vision_config.image_size
+
+    # Handle different model configurations
+    if hasattr(tmp_config, 'force_image_size') and tmp_config.force_image_size:
+        # InternVL2 style configuration
+        image_size = tmp_config.force_image_size
+    else:
+        # InternVL3 style configuration
+        image_size = tmp_config.vision_config.image_size
+        # Handle both single integer and list formats
+        if isinstance(image_size, list):
+            image_size = image_size[0]  # Assume square images, take first dimension
+
     patch_size = tmp_config.vision_config.patch_size
+    # Handle both single integer and list formats for patch_size
+    if isinstance(patch_size, list):
+        patch_size = patch_size[0]  # Assume square patches, take first dimension
+
     num_image_tokens = int((image_size // patch_size) ** 2 * (tmp_config.downsample_ratio ** 2))
     return num_image_tokens
 
@@ -91,7 +106,7 @@ def get_chat_tokens(tokenizer, prompts: List[str], user_start_token_str: str, as
     }
 
 
-def get_custom_chat_template(conversations: List[Dict], tokenizer, encoder_variant: str, num_image_tokens_total: int, cache_root_dir: str = 'pretrained') -> Optional[Dict]:
+def get_custom_chat_template(conversations: List[Dict], tokenizer, encoder_variant: str, num_image_tokens_total: int, cache_root_dir: str = 'pretrained') -> Tuple[Dict, Dict]:
     # get the custom chat template
     # for full conversation, question only
     # https://huggingface.co/docs/transformers/main/en/chat_templating#can-i-use-chat-templates-in-training
@@ -105,69 +120,116 @@ def get_custom_chat_template(conversations: List[Dict], tokenizer, encoder_varia
     IMG_CONTEXT_TOKEN='<IMG_CONTEXT>'
     IMG_TOKEN = '<image>'
 
-    cache_dir = f"{cache_root_dir}/{(encoder_variant.split('/')[1])}"
-    # get absolute path from workspace dir not wokring dir
-    cache_dir = to_absolute_path(cache_dir)
-    model_path = f"{cache_dir}/conversation.py"
-    if not os.path.exists(model_path):
-        from huggingface_hub import snapshot_download
-        snapshot_download(repo_id=encoder_variant, local_dir=cache_dir)
-        
-    #import from file from model_path
-    spec = importlib.util.spec_from_file_location('get_conv_template', model_path)
-    conv_module = importlib.util.module_from_spec(spec)
-    sys.modules['get_conv_template'] = conv_module
-    spec.loader.exec_module(conv_module)
+    # Check if this is InternVL3 which doesn't have conversation.py
+    if 'internvl3' in encoder_variant.lower():
+        # InternVL3 uses built-in chat templates, no need for conversation.py
+        conv_module = None
+    else:
+        # InternVL2 and older versions use conversation.py
+        cache_dir = f"{cache_root_dir}/{(encoder_variant.split('/')[1])}"
+        # get absolute path from workspace dir not wokring dir
+        cache_dir = to_absolute_path(cache_dir)
+        model_path = f"{cache_dir}/conversation.py"
+        if not os.path.exists(model_path):
+            from huggingface_hub import snapshot_download
+            snapshot_download(repo_id=encoder_variant, local_dir=cache_dir)
+
+        #import from file from model_path
+        spec = importlib.util.spec_from_file_location('get_conv_template', model_path)
+        conv_module = importlib.util.module_from_spec(spec)
+        sys.modules['get_conv_template'] = conv_module
+        spec.loader.exec_module(conv_module)
 
     image_tokens_templates = IMG_START_TOKEN + IMG_CONTEXT_TOKEN * num_image_tokens_total + IMG_END_TOKEN
 
     prompts_conv = []
     prompts_question = []
+
+    # Initialize template for role extraction (needed later)
+    template_conv = None
+
     # get the custom chat template
-    for idx, conv in enumerate(conversations):
+    for conv in conversations:
         assert len(conv) == 2, "For question and answer templates only two turn conversation (user + assistant) is supported. During training is should work but is not checked!!"
-        template_conv = conv_module.get_conv_template('internlm2-chat')
-        template_question = conv_module.get_conv_template('internlm2-chat')
 
-        # add full conversation
-        for conv_part_idx, conv_part in enumerate(conv):
-            content_str = conv_part['content'][0]['text']
-            if conv_part['role'] == 'assistant':
-                template_conv.append_message(template_conv.roles[1], content_str)
-            elif conv_part['role'] == 'user':
-                if conv_part_idx == 0 and IMG_TOKEN not in content_str:
+        if conv_module is None:
+            # InternVL3: Use tokenizer's built-in chat template
+            # Prepare conversation for full template (with answer)
+            conv_for_template = []
+            for conv_part in conv:
+                content_str = conv_part['content'][0]['text']
+                if conv_part['role'] == 'user' and IMG_TOKEN not in content_str:
                     content_str = f"{IMG_TOKEN}\n" + content_str
-                template_conv.append_message(template_conv.roles[0], content_str)
-            else:
-                raise ValueError(f"Role {conv_part['role']} not supported")
-        
-        assert conv[0]['role'] == 'user', "First turn should be user as this should be the question."
-        content_str_user = conv[0]['content'][0]['text']
-        if IMG_TOKEN not in content_str_user:
-            content_str_user = f"{IMG_TOKEN}\n" + content_str_user
-        template_question.append_message(template_question.roles[0], content_str_user)
-        template_question.append_message(template_question.roles[1], None)
+                conv_for_template.append({
+                    'role': conv_part['role'],
+                    'content': content_str
+                })
 
-        # get the prompt
-        prompt_conv = template_conv.get_prompt()
-        prompt_question = template_question.get_prompt()
+            # Prepare conversation for question only (without answer)
+            assert conv[0]['role'] == 'user', "First turn should be user as this should be the question."
+            content_str_user = conv[0]['content'][0]['text']
+            if IMG_TOKEN not in content_str_user:
+                content_str_user = f"{IMG_TOKEN}\n" + content_str_user
+            conv_for_question = [{'role': 'user', 'content': content_str_user}]
 
-        # replace system prompt to reduce tokens and save memory
-        # template_conv.system_template -> '<|im_start|>system\n{system_message}'
-        system_prompt = template_conv.system_template.replace('{system_message}', template_conv.system_message) + template_conv.sep
-        prompt_conv = prompt_conv.replace(system_prompt, '')
-        prompt_question = prompt_question.replace(system_prompt, '')
+            # Apply chat template
+            prompt_conv = tokenizer.apply_chat_template(conv_for_template, tokenize=False, add_generation_prompt=False)
+            prompt_question = tokenizer.apply_chat_template(conv_for_question, tokenize=False, add_generation_prompt=True)
 
-        # replace <image> with image token placeholders
-        prompt_conv = prompt_conv.replace(IMG_TOKEN, image_tokens_templates, 1)
-        prompt_question = prompt_question.replace(IMG_TOKEN, image_tokens_templates, 1)
+            # replace <image> with image token placeholders
+            prompt_conv = prompt_conv.replace(IMG_TOKEN, image_tokens_templates, 1)
+            prompt_question = prompt_question.replace(IMG_TOKEN, image_tokens_templates, 1)
+
+        else:
+            # InternVL2: Use conversation.py templates
+            template_conv = conv_module.get_conv_template('internlm2-chat')
+            template_question = conv_module.get_conv_template('internlm2-chat')
+
+            # add full conversation
+            for conv_part_idx, conv_part in enumerate(conv):
+                content_str = conv_part['content'][0]['text']
+                if conv_part['role'] == 'assistant':
+                    template_conv.append_message(template_conv.roles[1], content_str)
+                elif conv_part['role'] == 'user':
+                    if conv_part_idx == 0 and IMG_TOKEN not in content_str:
+                        content_str = f"{IMG_TOKEN}\n" + content_str
+                    template_conv.append_message(template_conv.roles[0], content_str)
+                else:
+                    raise ValueError(f"Role {conv_part['role']} not supported")
+
+            assert conv[0]['role'] == 'user', "First turn should be user as this should be the question."
+            content_str_user = conv[0]['content'][0]['text']
+            if IMG_TOKEN not in content_str_user:
+                content_str_user = f"{IMG_TOKEN}\n" + content_str_user
+            template_question.append_message(template_question.roles[0], content_str_user)
+            template_question.append_message(template_question.roles[1], None)
+
+            # get the prompt
+            prompt_conv = template_conv.get_prompt()
+            prompt_question = template_question.get_prompt()
+
+            # replace system prompt to reduce tokens and save memory
+            # template_conv.system_template -> '<|im_start|>system\n{system_message}'
+            system_prompt = template_conv.system_template.replace('{system_message}', template_conv.system_message) + template_conv.sep
+            prompt_conv = prompt_conv.replace(system_prompt, '')
+            prompt_question = prompt_question.replace(system_prompt, '')
+
+            # replace <image> with image token placeholders
+            prompt_conv = prompt_conv.replace(IMG_TOKEN, image_tokens_templates, 1)
+            prompt_question = prompt_question.replace(IMG_TOKEN, image_tokens_templates, 1)
 
         prompts_conv.append(prompt_conv)
         prompts_question.append(prompt_question)
 
     # on list of prompts to get the padding right
-    user_start_token_str = template_conv.roles[0]
-    assistant_start_token_str = template_conv.roles[1]
+    if conv_module is None:
+        # InternVL3: Use standard role names
+        user_start_token_str = 'user'
+        assistant_start_token_str = 'assistant'
+    else:
+        # InternVL2: Use template roles
+        user_start_token_str = template_conv.roles[0]
+        assistant_start_token_str = template_conv.roles[1]
 
     conv_dict = get_chat_tokens(tokenizer, prompts_conv, user_start_token_str, assistant_start_token_str)
     question_dict = get_chat_tokens(tokenizer, prompts_question, user_start_token_str, assistant_start_token_str)
@@ -186,7 +248,7 @@ def preprocess_image_batch(
     transform = build_transform(input_size=input_size)
     images_processed_tmp = []
     images_sizes_tmp = []
-    for idx, img in enumerate(images_batch_list):
+    for img in images_batch_list:
         image_np = img.numpy().astype(np.uint8)
         image_np = np.transpose(image_np, (1, 2, 0))
         image = Image.fromarray(image_np)
