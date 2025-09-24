@@ -430,7 +430,7 @@ class DrivingModel(pl.LightningModule):
             ckpt_path = Path(self.trainer.ckpt_path) #.parent.parent
         else:
             ckpt_path = Path(f'{repo_path}/outputs/{self.language_model.variant}')
-        save_prediction_path = ckpt_path / "predictions"
+        save_prediction_path = ckpt_path / "predictions_full"
         save_prediction_path.mkdir(exist_ok=True, parents=True)
 
         # Log the predictions directory
