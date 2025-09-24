@@ -301,9 +301,9 @@ class DrivingModel(pl.LightningModule):
         hidden_states = outputs.last_hidden_state  # Same as outputs[0] but more explicit
         logits = F.linear(hidden_states, self.language_model.model.embed_tokens.weight)
 
-        print(f"DEBUG FORWARD_MODEL: hidden_states shape: {hidden_states.shape}")
-        print(f"DEBUG FORWARD_MODEL: embed_tokens.weight shape: {self.language_model.model.embed_tokens.weight.shape}")
-        print(f"DEBUG FORWARD_MODEL: computed logits shape: {logits.shape}")
+        # print(f"DEBUG FORWARD_MODEL: hidden_states shape: {hidden_states.shape}")
+        # print(f"DEBUG FORWARD_MODEL: embed_tokens.weight shape: {self.language_model.model.embed_tokens.weight.shape}")
+        # print(f"DEBUG FORWARD_MODEL: computed logits shape: {logits.shape}")
 
         vision_features, adaptor_features = features.split(
             [features.size(1) - adaptor_embeds.size(1), adaptor_embeds.size(1)], dim=1
@@ -422,16 +422,20 @@ class DrivingModel(pl.LightningModule):
 
         return interp_points
 
-    def on_predict_epoch_end(self) -> None:    
+    def on_predict_epoch_end(self) -> None:
 
         repo_path = get_original_cwd()
 
         if self.trainer.ckpt_path is not None:
-            ckpt_path = Path(self.trainer.ckpt_path).parent.parent
+            ckpt_path = Path(self.trainer.ckpt_path) #.parent.parent
         else:
             ckpt_path = Path(f'{repo_path}/outputs/{self.language_model.variant}')
         save_prediction_path = ckpt_path / "predictions"
         save_prediction_path.mkdir(exist_ok=True, parents=True)
+
+        # Log the predictions directory
+        print(f"💾 Predictions will be saved to: {save_prediction_path}")
+        print(f"📁 Predictions directory: {save_prediction_path.absolute()}")
         
         samples_cot = [i for i, l in enumerate(self.prediction["prompt"]) if "What should the ego do next?" in l]
         samples_qa = [i for i, l in enumerate(self.prediction["prompt"]) if "Q:" in l]

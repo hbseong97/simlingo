@@ -7,8 +7,7 @@
 #SBATCH --mem=50G
 #SBATCH --output=logs/eval_slv2_%a_%A.out  # File to which STDOUT will be written
 #SBATCH --error=logs/eval_slv2_%a_%A.err   # File to which STDERR will be written
-#SBATCH --partition=h100
-#SBATCH --nodelist=DGX-H100-11
+#SBATCH --partition=a100
 
 # print info about current job
 scontrol show job $SLURM_JOB_ID
@@ -26,4 +25,30 @@ export PYTHONPATH="${CARLA_ROOT}/PythonAPI/carla/":"${SCENARIO_RUNNER_ROOT}":"${
 export PYTHONPATH=$PYTHONPATH:${WORK_DIR}
 
 
-python -m simlingo_training.eval
+
+# load_path = '/mnt/raid12/cache/huggingface/hub/models--RenzKa--simlingo/snapshots/26c7c89e797d4e25bbf640013317af8da26a5454/simlingo/checkpoints/epoch=013.ckpt'
+# load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/05-45-21/checkpoints/epoch=004.ckpt' # Internvl2
+# load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/12-13-14/checkpoints/epoch=002.ckpt' # Internvl3
+# # 3 batch
+# load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/13-12-28/checkpoints/last.ckpt' # /mnt/harbor/projects/owa/checkpoints/InternVL3-1B-hf-no_seminit
+# load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/13-31-03/checkpoints/last.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms/checkpoint-12892
+# load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/13-45-51/checkpoints/last.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms-PT-FT/checkpoint-9669
+# # 1 epoch
+# load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/15-49-38/checkpoints/last.ckpt' # /mnt/harbor/projects/owa/checkpoints/InternVL3-1B-hf-no_seminit
+# load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/15-49-41/checkpoints/last.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms/checkpoint-12892
+# load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/15-49-43/checkpoints/last.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms-PT-FT/checkpoint-9669
+
+
+
+
+LOAD_PATH='/mnt/home/haebin/raid12/scratch/simlingo/outputs/2025-09-24/01-08-01/checkpoints/epoch=000-step=001500.ckpt' # /mnt/harbor/projects/owa/checkpoints/InternVL3-1B-hf-no_seminit
+
+python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
+
+LOAD_PATH='/mnt/home/haebin/raid12/scratch/simlingo/outputs/2025-09-24/01-09-48/checkpoints/epoch=000-step=001500.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms/checkpoint-12892
+
+python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
+
+LOAD_PATH='/mnt/home/haebin/raid12/scratch/simlingo/outputs/2025-09-24/01-11-21/checkpoints/epoch=000-step=001500.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms-PT-FT/checkpoint-9669
+
+python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}

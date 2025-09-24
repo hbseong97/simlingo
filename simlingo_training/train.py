@@ -117,15 +117,25 @@ def main(cfg: TrainConfig):
             stage=2, loss_scale=cfg.fp16_loss_scale, logging_batch_size_per_gpu=cfg.data_module.batch_size
         )
 
+    # Get the absolute path for checkpoints
+    checkpoint_dir = os.path.abspath("./checkpoints")
+
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         save_top_k=-1,
         monitor=None,
         dirpath="./checkpoints",
-        filename="{epoch:03d}",
+        filename="{epoch:03d}-{step:06d}",
         save_last=True,
-        every_n_epochs=cfg.val_every_n_epochs,
-        # every_n_train_steps=cfg.val_check_interval,
+        # every_n_epochs=cfg.val_every_n_epochs,
+        every_n_train_steps=cfg.val_check_interval,
     )
+
+    # Print checkpoint save location
+    print(f"🔄 Checkpoints will be saved to: {checkpoint_dir}")
+    print(f"📁 Checkpoint pattern: {checkpoint_dir}/{{epoch:03d}}-{{step:06d}}.ckpt")
+    print(f"💾 Last checkpoint: {checkpoint_dir}/last.ckpt")
+    print(f"⏰ Saving every {cfg.val_every_n_epochs} epochs")
+    print(f"⏰ Saving every {cfg.val_check_interval} steps")
 
     lr_monitor = LearningRateMonitor(logging_interval='step')
     model_summary = ModelSummary(max_depth=3)
@@ -133,7 +143,7 @@ def main(cfg: TrainConfig):
         checkpoint_callback, 
         model_summary, 
         # ThroughputMonitor(batch_size_fn=lambda batch: batch.driving_input.camera_images.size(0)), 
-        VisualiseCallback(interval=1000, val_interval=1000)
+        # VisualiseCallback(interval=1000, val_interval=1000)
     ]
     if not cfg.debug: 
         callbacks.append(lr_monitor)
@@ -159,13 +169,29 @@ def main(cfg: TrainConfig):
             # use_distributed_sampler=False,
             max_epochs=cfg.max_epochs,
             overfit_batches=overfit,
-            check_val_every_n_epoch=cfg.val_every_n_epochs,
-            # val_check_interval=cfg.val_check_interval,
+            # check_val_every_n_epoch=cfg.val_every_n_epochs,
+            val_check_interval=cfg.val_check_interval,
             limit_train_batches=cfg.limit_train_batches,
             limit_val_batches=cfg.limit_val_batches,
         )
 
     trainer.fit(model, data_module, ckpt_path=resume_path)
+
+    # Print final checkpoint information
+    print(f"\n🎉 Training completed!")
+    print(f"📁 Final checkpoints saved in: {checkpoint_dir}")
+    if os.path.exists(f"{checkpoint_dir}/last.ckpt"):
+        print(f"💾 Last checkpoint: {checkpoint_dir}/last.ckpt")
+
+    # List all saved checkpoints
+    if os.path.exists(checkpoint_dir):
+        checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.endswith('.ckpt')]
+        if checkpoint_files:
+            print(f"📋 All saved checkpoints:")
+            for ckpt_file in sorted(checkpoint_files):
+                full_path = os.path.join(checkpoint_dir, ckpt_file)
+                print(f"   • {full_path}")
+
     wandb.finish()
 
 if __name__ == "__main__":

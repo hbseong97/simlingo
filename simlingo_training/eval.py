@@ -25,9 +25,19 @@ def main(cfg: TrainConfig):
 
     qa_dataset = cfg.data_module.qa_dataset
     insteval_dataset = cfg.data_module.insteval_dataset
-    load_path = '/mnt/raid12/cache/huggingface/hub/models--RenzKa--simlingo/snapshots/26c7c89e797d4e25bbf640013317af8da26a5454/simlingo/checkpoints/epoch=013.ckpt'
-    load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/05-45-21/checkpoints/epoch=004.ckpt' # Internvl2
-    load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/12-13-14/checkpoints/epoch=002.ckpt' # Internvl3
+    load_path = cfg.load_path
+    # load_path = '/mnt/raid12/cache/huggingface/hub/models--RenzKa--simlingo/snapshots/26c7c89e797d4e25bbf640013317af8da26a5454/simlingo/checkpoints/epoch=013.ckpt'
+    # load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/05-45-21/checkpoints/epoch=004.ckpt' # Internvl2
+    # load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/12-13-14/checkpoints/epoch=002.ckpt' # Internvl3
+    # # 3 batch
+    # load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/13-12-28/checkpoints/last.ckpt' # /mnt/harbor/projects/owa/checkpoints/InternVL3-1B-hf-no_seminit
+    # load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/13-31-03/checkpoints/last.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms/checkpoint-12892
+    # load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/13-45-51/checkpoints/last.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms-PT-FT/checkpoint-9669
+    # # 1 epoch
+    # load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/15-49-38/checkpoints/last.ckpt' # /mnt/harbor/projects/owa/checkpoints/InternVL3-1B-hf-no_seminit
+    # load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/15-49-41/checkpoints/last.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms/checkpoint-12892
+    # load_path = '/mnt/raid12/scratch/simlingo/outputs/2025-09-23/15-49-43/checkpoints/last.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms-PT-FT/checkpoint-9669
+
     if load_path is not None:
         load_path_config = Path(load_path).parent.parent / '.hydra/config.yaml'
         cfg = OmegaConf.load(load_path_config)

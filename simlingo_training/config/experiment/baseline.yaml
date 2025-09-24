@@ -45,10 +45,10 @@ data_module:
 
 max_epochs: 1
 # val_every_n_epochs: 1
-val_check_interval: 3
-limit_train_batches: 10  # Limit to 3 batches per epoch (3 * 8 = 24 samples, close to 20)
+val_check_interval: 500
+limit_train_batches: 5000  # Limit to 3 batches per epoch (3 * 8 = 24 samples, close to 20)
 limit_val_batches: 1  # Limit to 3 batches per validation (3 * 8 = 24 samples, close to 20)
 
-gpus: 1
+gpus: 8
 seed: 42
 name: debug

@@ -201,6 +201,7 @@ class BaseDataset(Dataset):  # pylint: disable=locally-disabled, invalid-name
         random.shuffle(route_dirs)
         split_percentage = 0.99
         if dreamer or not self.use_town13:
+            print(f"{dreamer=}")
             # split the data into official training(Town12 and old Towns) and validation set (Town13)
             if self.split == "train":
                 print("Using Town12 for training")

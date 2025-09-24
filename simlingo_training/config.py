@@ -123,6 +123,7 @@ class TrainConfig:
 
     resume: bool = False
     resume_path: Optional[str] = None
+    load_path: Optional[str] = None  # Path to checkpoint for evaluation
 
     debug: bool = False
     overfit: int = 0
@@ -142,7 +143,7 @@ class TrainConfig:
     max_epochs: int = 20
     precision: str = "16-mixed"
     strategy: str = "deepspeed_stage_2" # deepspeed_stage_2 ddp
-    # val_check_interval: int = 5000
+    val_check_interval: int = 500
     val_every_n_epochs: int = 1
     limit_train_batches: Optional[Union[int, float]] = None
     limit_val_batches: Optional[Union[int, float]] = None

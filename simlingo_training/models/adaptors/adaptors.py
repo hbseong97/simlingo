@@ -327,10 +327,11 @@ class LanguageAdaptor(nn.Module):
     ) -> Dict[str, Tuple[Tensor, Tensor]]:
         del example
 
-        print(f"DEBUG COMPUTE_LOSS: adaptor_logits is None: {adaptor_logits is None}")
+        # print(f"DEBUG COMPUTE_LOSS: adaptor_logits is None: {adaptor_logits is None}")
         if adaptor_logits is not None:
-            print(f"DEBUG COMPUTE_LOSS: adaptor_logits shape: {adaptor_logits.shape}")
-            print(f"DEBUG COMPUTE_LOSS: adaptor_logits passed in from outside!")
+            # print(f"DEBUG COMPUTE_LOSS: adaptor_logits shape: {adaptor_logits.shape}")
+            # print(f"DEBUG COMPUTE_LOSS: adaptor_logits passed in from outside!")
+            pass
 
         if adaptor_logits is None:
             print(f"DEBUG BRANCH: lm_head is None: {self.lm_head is None}")
@@ -360,14 +361,14 @@ class LanguageAdaptor(nn.Module):
         labels = labels[:, 1:]
 
         # DEBUG: Print debug info before cross-entropy loss
-        print(f"DEBUG: adaptor_logits shape: {adaptor_logits.shape}")
-        print(f"DEBUG: labels shape: {labels.shape}")
-        print(f"DEBUG: labels max: {labels.max().item()}")
-        print(f"DEBUG: labels min: {labels.min().item()}")
-        print(f"DEBUG: vocab size (logits): {adaptor_logits.shape[-1]}")
-        print(f"DEBUG: embed_tokens size: {self.embed_tokens.num_embeddings}")
-        print(f"DEBUG: embed_tokens.weight shape: {self.embed_tokens.weight.shape}")
-        print(f"DEBUG: embed_tokens.weight id: {id(self.embed_tokens.weight)}")
+        # print(f"DEBUG: adaptor_logits shape: {adaptor_logits.shape}")
+        # print(f"DEBUG: labels shape: {labels.shape}")
+        # print(f"DEBUG: labels max: {labels.max().item()}")
+        # print(f"DEBUG: labels min: {labels.min().item()}")
+        # print(f"DEBUG: vocab size (logits): {adaptor_logits.shape[-1]}")
+        # print(f"DEBUG: embed_tokens size: {self.embed_tokens.num_embeddings}")
+        # print(f"DEBUG: embed_tokens.weight shape: {self.embed_tokens.weight.shape}")
+        # print(f"DEBUG: embed_tokens.weight id: {id(self.embed_tokens.weight)}")
 
         # Check for out-of-bounds labels
         valid_labels = labels[labels != -1]

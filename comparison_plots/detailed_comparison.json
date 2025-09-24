@@ -1,0 +1,104 @@
+{
+  "timestamp": "2025-09-24T05:03:22.660048",
+  "summary_statistics": {
+    "num_experiments": 3,
+    "best_overall": "2025-09-24/01-08-01",
+    "worst_overall": "2025-09-24/01-09-48",
+    "mean_success_rate": 0.25396825396825395,
+    "std_success_rate": 0.025365650550139878
+  },
+  "detailed_results": {
+    "2025-09-24/01-08-01": {
+      "success_rate_total_instruction": 0.2727272727272727,
+      "success_rate_instruction_crash": 0.5079365079365079,
+      "success_rate_instruction_target_speed": 0.19607843137254902,
+      "success_rate_instruction_lane_change": 0.16666666666666666,
+      "success_rate_instruction_slower": 0.0,
+      "success_rate_instruction_stop": 0.0,
+      "success_rate_instruction_faster": 0.4,
+      "num_samples_instruction": 231,
+      "experiment": "2025-09-24/01-08-01",
+      "file_path": "outputs/2025-09-24/01-08-01/checkpoints/epoch=000-step=000500.ckpt/predictions/dreamer_results_rank_0.json",
+      "variant": "baseline",
+      "epoch": "000",
+      "step": "000500",
+      "checkpoint_info": "epoch=000-step=000500.ckpt"
+    },
+    "2025-09-24/01-09-48": {
+      "success_rate_total_instruction": 0.22510822510822512,
+      "success_rate_instruction_crash": 0.19047619047619047,
+      "success_rate_instruction_target_speed": 0.0196078431372549,
+      "success_rate_instruction_lane_change": 0.5555555555555556,
+      "success_rate_instruction_slower": 0.7714285714285715,
+      "success_rate_instruction_stop": 0.0,
+      "success_rate_instruction_faster": 0.044444444444444446,
+      "num_samples_instruction": 231,
+      "experiment": "2025-09-24/01-09-48",
+      "file_path": "outputs/2025-09-24/01-09-48/checkpoints/epoch=000-step=000500.ckpt/predictions/dreamer_results_rank_0.json",
+      "variant": "PT",
+      "epoch": "000",
+      "step": "000500",
+      "checkpoint_info": "epoch=000-step=000500.ckpt"
+    },
+    "2025-09-24/01-11-21": {
+      "success_rate_total_instruction": 0.26406926406926406,
+      "success_rate_instruction_crash": 0.3333333333333333,
+      "success_rate_instruction_target_speed": 0.09803921568627451,
+      "success_rate_instruction_lane_change": 0.5,
+      "success_rate_instruction_slower": 0.4,
+      "success_rate_instruction_stop": 0.0,
+      "success_rate_instruction_faster": 0.26666666666666666,
+      "num_samples_instruction": 231,
+      "experiment": "2025-09-24/01-11-21",
+      "file_path": "outputs/2025-09-24/01-11-21/checkpoints/epoch=000-step=000500.ckpt/predictions/dreamer_results_rank_0.json",
+      "variant": "PT-FT",
+      "epoch": "000",
+      "step": "000500",
+      "checkpoint_info": "epoch=000-step=000500.ckpt"
+    }
+  },
+  "comparison_table": [
+    {
+      "experiment": "2025-09-24/01-08-01",
+      "variant": "baseline",
+      "epoch": "000",
+      "step": "000500",
+      "total_success_rate": 0.2727272727272727,
+      "crash_success_rate": 0.5079365079365079,
+      "target_speed_success_rate": 0.19607843137254902,
+      "lane_change_success_rate": 0.16666666666666666,
+      "slower_success_rate": 0.0,
+      "stop_success_rate": 0.0,
+      "faster_success_rate": 0.4,
+      "num_samples": 231
+    },
+    {
+      "experiment": "2025-09-24/01-09-48",
+      "variant": "PT",
+      "epoch": "000",
+      "step": "000500",
+      "total_success_rate": 0.22510822510822512,
+      "crash_success_rate": 0.19047619047619047,
+      "target_speed_success_rate": 0.0196078431372549,
+      "lane_change_success_rate": 0.5555555555555556,
+      "slower_success_rate": 0.7714285714285715,
+      "stop_success_rate": 0.0,
+      "faster_success_rate": 0.044444444444444446,
+      "num_samples": 231
+    },
+    {
+      "experiment": "2025-09-24/01-11-21",
+      "variant": "PT-FT",
+      "epoch": "000",
+      "step": "000500",
+      "total_success_rate": 0.26406926406926406,
+      "crash_success_rate": 0.3333333333333333,
+      "target_speed_success_rate": 0.09803921568627451,
+      "lane_change_success_rate": 0.5,
+      "slower_success_rate": 0.4,
+      "stop_success_rate": 0.0,
+      "faster_success_rate": 0.26666666666666666,
+      "num_samples": 231
+    }
+  ]
+}
