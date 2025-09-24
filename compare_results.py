@@ -25,7 +25,7 @@ def find_result_files(base_dir="outputs", date_filter=None, variant_filter=None)
     Args:
         base_dir: Base directory to search in
         date_filter: Optional date filter (e.g., "2025-09-24" to filter by specific date)
-        variant_filter: Optional variant filter (e.g., "baseline", "PT", "PT-FT")
+        variant_filter: Optional variant filter (e.g., "baseline", "FT", "PT-FT")
 
     Returns:
         List of tuples: (experiment_path, result_file_path, checkpoint_info)
@@ -87,7 +87,7 @@ def extract_variant_info(exp_name, base_dir="outputs"):
             elif 'InternVL3-1B-HF_0ms-PT-FT' in vision_variant:
                 return 'PT-FT'
             elif 'InternVL3-1B-HF_0ms' in vision_variant:
-                return 'PT'
+                return 'FT'
             else:
                 # Extract the last directory name
                 return os.path.basename(vision_variant)
@@ -135,6 +135,9 @@ def load_results(result_files):
             # Extract epoch and step info
             epoch, step = extract_epoch_step_info(checkpoint_info)
 
+            # Create unique key for each experiment-step combination
+            unique_key = f"{exp_name}_step_{step}"
+
             # Add metadata
             data['experiment'] = exp_name
             data['file_path'] = file_path
@@ -143,7 +146,7 @@ def load_results(result_files):
             data['step'] = step
             data['checkpoint_info'] = checkpoint_info or "unknown"
 
-            experiments[exp_name] = data
+            experiments[unique_key] = data
             print(f"Loaded results for experiment: {exp_name} (variant: {data['variant']}, epoch: {epoch}, step: {step})")
 
         except Exception as e:
@@ -170,6 +173,9 @@ def create_comparison_dataframe(experiments):
             'variant': data.get('variant', 'unknown'),
             'epoch': data.get('epoch', 'unknown'),
             'step': data.get('step', 'unknown'),
+            'step_int': int(data.get('step', '0')) if data.get('step', '0').isdigit() else 0,
+            'experiment_step': f"{exp_name}_step_{data.get('step', 'unknown')}",
+            'variant_step': f"{data.get('variant', 'unknown')}_step_{data.get('step', 'unknown')}",
             'total_success_rate': data.get('success_rate_total_instruction', 0),
             'crash_success_rate': data.get('success_rate_instruction_crash', 0),
             'target_speed_success_rate': data.get('success_rate_instruction_target_speed', 0),
@@ -181,27 +187,38 @@ def create_comparison_dataframe(experiments):
         }
         rows.append(row)
 
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    # Sort by step and then by variant for step-grouped ordering
+    # Define variant order for consistent grouping
+    variant_order = {'baseline': 0, 'FT': 1, 'PT-FT': 2}
+    df['variant_order'] = df['variant'].map(variant_order).fillna(999)
+    df = df.sort_values(['step_int', 'variant_order'])
+    df = df.drop('variant_order', axis=1)
+    return df
 
 
 def print_comparison_table(df):
     """Print a formatted comparison table."""
-    print("\n" + "="*100)
-    print("EXPERIMENT RESULTS COMPARISON")
-    print("="*100)
-    
+    print("\n" + "="*120)
+    print("EXPERIMENT RESULTS COMPARISON (ALL STEPS)")
+    print("="*120)
+
     # Format the dataframe for better display
     display_df = df.copy()
-    
+
     # Convert success rates to percentages
     rate_columns = [col for col in df.columns if 'success_rate' in col]
     for col in rate_columns:
         display_df[col] = (display_df[col] * 100).round(2)
-    
-    # Rename columns for better display
-    display_df = display_df.rename(columns={
+
+    # Select and rename columns for better display
+    display_columns = ['experiment', 'variant', 'step', 'total_success_rate', 'crash_success_rate',
+                      'target_speed_success_rate', 'lane_change_success_rate', 'slower_success_rate',
+                      'stop_success_rate', 'faster_success_rate', 'num_samples']
+
+    display_df = display_df[display_columns].rename(columns={
+        'experiment': 'Experiment',
         'variant': 'Variant',
-        'epoch': 'Epoch',
         'step': 'Step',
         'total_success_rate': 'Total (%)',
         'crash_success_rate': 'Crash (%)',
@@ -212,21 +229,21 @@ def print_comparison_table(df):
         'faster_success_rate': 'Faster (%)',
         'num_samples': 'Samples'
     })
-    
+
     print(display_df.to_string(index=False, float_format='%.2f'))
-    print("="*100)
+    print("="*120)
 
 
 def create_visualizations(df, output_dir="comparison_plots"):
     """Create visualization plots for the comparison."""
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Set up the plotting style
     plt.style.use('default')
     sns.set_palette("husl")
-    
-    # 1. Overall success rate comparison with variants
-    plt.figure(figsize=(15, 8))
+
+    # 1. Overall success rate comparison with variants and steps
+    plt.figure(figsize=(20, 10))
 
     # Create colors based on variants
     unique_variants = df['variant'].unique()
@@ -235,19 +252,19 @@ def create_visualizations(df, output_dir="comparison_plots"):
     bar_colors = [variant_colors[variant] for variant in df['variant']]
 
     bars = plt.bar(range(len(df)), df['total_success_rate'] * 100, color=bar_colors)
-    plt.xlabel('Experiment')
+    plt.xlabel('Experiment (Variant - Step)')
     plt.ylabel('Total Success Rate (%)')
-    plt.title('Overall Success Rate Comparison by Variant')
+    plt.title('Overall Success Rate Comparison by Variant and Training Step')
 
-    # Create experiment labels with variant info
-    exp_labels = [f"{exp}\n({variant})" for exp, variant in zip(df['experiment'], df['variant'])]
+    # Create experiment labels with variant and step info
+    exp_labels = [f"{variant}\nStep {step}" for variant, step in zip(df['variant'], df['step'])]
     plt.xticks(range(len(df)), exp_labels, rotation=45, ha='right')
 
     # Add value labels on bars
     for i, bar in enumerate(bars):
         height = bar.get_height()
         plt.text(bar.get_x() + bar.get_width()/2., height + 0.5,
-                f'{height:.1f}%', ha='center', va='bottom')
+                f'{height:.1f}%', ha='center', va='bottom', fontsize=8)
 
     # Add legend for variants
     legend_elements = [mpatches.Rectangle((0,0),1,1, facecolor=variant_colors[variant], label=variant)
@@ -258,14 +275,14 @@ def create_visualizations(df, output_dir="comparison_plots"):
     plt.savefig(f'{output_dir}/overall_success_rates.png', dpi=300, bbox_inches='tight')
     plt.show()
     
-    # 2. Detailed breakdown by instruction type with variants
+    # 2. Detailed breakdown by instruction type with variants and steps
     instruction_types = ['crash_success_rate', 'target_speed_success_rate',
                         'lane_change_success_rate', 'slower_success_rate',
                         'stop_success_rate', 'faster_success_rate']
 
     instruction_labels = ['Crash', 'Target Speed', 'Lane Change', 'Slower', 'Stop', 'Faster']
 
-    plt.figure(figsize=(18, 10))
+    plt.figure(figsize=(24, 12))
 
     x = range(len(df))
     width = 0.12
@@ -274,35 +291,51 @@ def create_visualizations(df, output_dir="comparison_plots"):
         offset = (i - len(instruction_types)/2) * width
         plt.bar([xi + offset for xi in x], df[col] * 100, width, label=label)
 
-    plt.xlabel('Experiment')
+    plt.xlabel('Experiment (Variant - Step)')
     plt.ylabel('Success Rate (%)')
-    plt.title('Success Rate by Instruction Type and Variant')
+    plt.title('Success Rate by Instruction Type, Variant, and Training Step')
 
-    # Create experiment labels with variant and epoch info
-    exp_labels = [f"{exp}\n({variant}, E{epoch})" for exp, variant, epoch in
-                  zip(df['experiment'], df['variant'], df['epoch'])]
+    # Create experiment labels with variant and step info
+    exp_labels = [f"{variant}\nStep {step}" for variant, step in zip(df['variant'], df['step'])]
     plt.xticks(x, exp_labels, rotation=45, ha='right')
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig(f'{output_dir}/detailed_breakdown.png', dpi=300, bbox_inches='tight')
     plt.show()
     
-    # 3. Heatmap of success rates with variant information
-    plt.figure(figsize=(14, 8))
+    # 3. Heatmap of success rates with variant and step information
+    plt.figure(figsize=(20, 10))
     heatmap_data = df[instruction_types].T * 100
 
-    # Create column labels with variant and epoch info
-    col_labels = [f"{exp}\n({variant}, E{epoch})" for exp, variant, epoch in
-                  zip(df['experiment'], df['variant'], df['epoch'])]
+    # Create column labels with variant and step info
+    col_labels = [f"{variant}\nStep {step}" for variant, step in zip(df['variant'], df['step'])]
     heatmap_data.columns = col_labels
     heatmap_data.index = instruction_labels
 
     sns.heatmap(heatmap_data, annot=True, fmt='.1f', cmap='RdYlGn',
                 cbar_kws={'label': 'Success Rate (%)'})
-    plt.title('Success Rate Heatmap by Instruction Type and Variant')
+    plt.title('Success Rate Heatmap by Instruction Type, Variant, and Training Step')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.savefig(f'{output_dir}/success_rate_heatmap.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+    # 4. Training progression plot for each variant
+    plt.figure(figsize=(15, 8))
+
+    for variant in unique_variants:
+        variant_data = df[df['variant'] == variant].sort_values('step_int')
+        if len(variant_data) > 1:  # Only plot if there are multiple steps
+            plt.plot(variant_data['step_int'], variant_data['total_success_rate'] * 100,
+                    marker='o', label=variant, linewidth=2, markersize=6)
+
+    plt.xlabel('Training Step')
+    plt.ylabel('Total Success Rate (%)')
+    plt.title('Training Progression: Success Rate vs Training Steps by Variant')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f'{output_dir}/training_progression.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -336,7 +369,7 @@ def main():
     parser.add_argument('--no-plots', action='store_true',
                        help='Skip generating plots')
     parser.add_argument('--date', help='Filter by date (e.g., 2025-09-24)')
-    parser.add_argument('--variant', help='Filter by variant (e.g., baseline, PT, PT-FT)')
+    parser.add_argument('--variant', help='Filter by variant (e.g., baseline, FT, PT-FT)')
 
     args = parser.parse_args()
 

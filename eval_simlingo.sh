@@ -7,7 +7,9 @@
 #SBATCH --mem=50G
 #SBATCH --output=logs/eval_slv2_%a_%A.out  # File to which STDOUT will be written
 #SBATCH --error=logs/eval_slv2_%a_%A.err   # File to which STDERR will be written
-#SBATCH --partition=a100
+#SBATCH --partition=h100
+#SBATCH --nodelist=DGX-H100-11
+
 
 # print info about current job
 scontrol show job $SLURM_JOB_ID
@@ -41,14 +43,25 @@ export PYTHONPATH=$PYTHONPATH:${WORK_DIR}
 
 
 
-LOAD_PATH='/mnt/home/haebin/raid12/scratch/simlingo/outputs/2025-09-24/01-08-01/checkpoints/epoch=000-step=001500.ckpt' # /mnt/harbor/projects/owa/checkpoints/InternVL3-1B-hf-no_seminit
+# Evaluate checkpoints from step 1000 to 3500 with 500 stride
+for STEP in 003500; do
+    echo "Evaluating step ${STEP}..."
 
-python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
+    # Model 1: /mnt/harbor/projects/owa/checkpoints/InternVL3-1B-hf-no_seminit
+    LOAD_PATH="/mnt/home/haebin/raid12/scratch/simlingo/outputs/2025-09-24/01-08-01/checkpoints/epoch=000-step=${STEP}.ckpt"
+    echo "Evaluating: ${LOAD_PATH}"
+    python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
 
-LOAD_PATH='/mnt/home/haebin/raid12/scratch/simlingo/outputs/2025-09-24/01-09-48/checkpoints/epoch=000-step=001500.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms/checkpoint-12892
+    # Model 2: /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms/checkpoint-12892
+    LOAD_PATH="/mnt/home/haebin/raid12/scratch/simlingo/outputs/2025-09-24/01-09-48/checkpoints/epoch=000-step=${STEP}.ckpt"
+    echo "Evaluating: ${LOAD_PATH}"
+    python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
 
-python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
+    # Model 3: /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms-PT-FT/checkpoint-9669
+    LOAD_PATH="/mnt/home/haebin/raid12/scratch/simlingo/outputs/2025-09-24/01-11-21/checkpoints/epoch=000-step=${STEP}.ckpt"
+    echo "Evaluating: ${LOAD_PATH}"
+    python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
 
-LOAD_PATH='/mnt/home/haebin/raid12/scratch/simlingo/outputs/2025-09-24/01-11-21/checkpoints/epoch=000-step=001500.ckpt' # /mnt/harbor/users/jyjung/checkpoints/iclr_agent/InternVL3-1B-HF_0ms-PT-FT/checkpoint-9669
-
-python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
+    echo "Completed step ${STEP}"
+    echo "----------------------------------------"
+done
