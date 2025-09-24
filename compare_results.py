@@ -20,7 +20,7 @@ import yaml
 
 def find_result_files(base_dir="outputs", date_filter=None, variant_filter=None):
     """
-    Find all dreamer_results_rank_0.json files in the output directory structure.
+    Find all dreamer_results_rank_0.json files in the predictions_full directory only.
 
     Args:
         base_dir: Base directory to search in
@@ -32,8 +32,8 @@ def find_result_files(base_dir="outputs", date_filter=None, variant_filter=None)
     """
     result_files = []
 
-    # Pattern to match the result files
-    pattern = os.path.join(base_dir, "**/dreamer_results_rank_0.json")
+    # Pattern to match the result files specifically in predictions_full directories
+    pattern = os.path.join(base_dir, "**/predictions_full/dreamer_results_rank_0.json")
 
     for result_file in glob.glob(pattern, recursive=True):
         # Extract experiment identifier from path
