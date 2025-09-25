@@ -170,15 +170,15 @@ def kill_dead_jobs(jobs):
 configs = [
     {
     "agent": "simlingo",
-    "checkpoint": "/mnt/raid12/cache/huggingface/hub/models--RenzKa--simlingo/snapshots/26c7c89e797d4e25bbf640013317af8da26a5454/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt",
+    "checkpoint": "/home/khemoo/simlingo/models/01-08-01/checkpoints/epoch=000-step=001500.ckpt",
     "benchmark": "bench2drive",
-    "route_path": "/mnt/raid12/scratch/simlingo/leaderboard/data/bench2drive_split",
+    "route_path": "/home/khemoo/simlingo/simlingo/leaderboard/data/bench2drive_split",
     "seeds": [1], # TODO: change depending on how many eval seeds you wanna run (paper uses one eval seed on three train seeds)
     "tries": 2,
-    "out_root": "/mnt/raid12/scratch/simlingo/eval_results/Bench2Drive",
+    "out_root": "/home/khemoo/simlingo/simlingo/eval_results/Bench2Drive",
     "carla_root": "~/software/carla0915",
-    "repo_root": "/mnt/raid12/scratch/simlingo",
-    "agent_file": "/mnt/raid12/scratch/simlingo/team_code/agent_simlingo.py",
+    "repo_root": "/home/khemoo/simlingo/simlingo",
+    "agent_file": "/home/khemoo/simlingo/simlingo/team_code/agent_simlingo.py",
     "team_code": "team_code",
     "agent_config": "not_used",
     "username": "haebin"

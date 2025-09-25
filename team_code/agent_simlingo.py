@@ -159,7 +159,14 @@ class LingoAgent(autonomous_agent.AutonomousAgent):
         self.tokenizer.add_special_tokens({'additional_special_tokens': ['<WAYPOINTS>','<WAYPOINTS_DIFF>', '<ORG_WAYPOINTS_DIFF>', '<ORG_WAYPOINTS>', '<WAYPOINT_LAST>', '<ROUTE>', '<ROUTE_DIFF>', '<TARGET_POINT>']})
         self.tokenizer.padding_side = "left"
         # llm_tokenizer = AutoTokenizer.from_pretrained(cfg.model.language_model.variant)
-        cache_dir = f"pretrained/{(cfg.model.vision_model.variant.split('/')[1])}"
+        # Handle both local paths and HuggingFace repo IDs for cache_dir
+        variant = cfg.model.vision_model.variant
+        if os.path.isabs(variant) and os.path.exists(variant):
+            # It's a local path, use it directly
+            cache_dir = variant
+        else:
+            # It's a HuggingFace repo ID, create cache directory
+            cache_dir = f"pretrained/{(variant.split('/')[1])}"
         default_dtype = torch.get_default_dtype()
         torch.set_default_dtype(torch.bfloat16)
         self.model = hydra.utils.instantiate(
@@ -384,7 +391,7 @@ class LingoAgent(autonomous_agent.AutonomousAgent):
         rgbs = rgb
         image_sizes = None
         
-        if 'internvl2' in self.cfg.model.vision_model.variant.lower():
+        if 'internvl' in self.cfg.model.vision_model.variant.lower():
             T, C, H, W = rgbs.shape
             transform = build_transform(input_size=448)
             images_processed_tmp = []
@@ -408,7 +415,7 @@ class LingoAgent(autonomous_agent.AutonomousAgent):
             processed_image = processed_image.view(1, self.T, num_patches, C, new_height, new_width)
             
         else:
-            raise NotImplementedError(f"Encoder {self.cfg.data_module.encoder} not implemented yet")
+            raise NotImplementedError(f"Vision model {self.cfg.model.vision_model.variant} not implemented yet")
         
         gps_pos = self._route_planner.convert_gps_to_carla(input_data['gps'][1])
         
@@ -583,60 +590,108 @@ class LingoAgent(autonomous_agent.AutonomousAgent):
                         questions.append(conv[i]['content'][0]['text'])
                         conv[i]['content'] = conv[i]['content'][0]['text']
                         
-        cache_dir = f"pretrained/{(self.cfg.model.vision_model.variant.split('/')[1])}"
-        # get absolute path from workspace dir not wokring dir
-        cache_dir = to_absolute_path(cache_dir)
-        model_path = f"{cache_dir}/conversation.py"
-        if not os.path.exists(model_path):
-                from huggingface_hub import snapshot_download
-                snapshot_download(repo_id=self.cfg.model.vision_model.variant, local_dir=cache_dir)
-                
-        #import from file from model_path
-        spec = importlib.util.spec_from_file_location('get_conv_template', model_path)
-        conv_module = importlib.util.module_from_spec(spec)
-        sys.modules['get_conv_template'] = conv_module
-        spec.loader.exec_module(conv_module)
+        # Check if this is InternVL3 which doesn't have conversation.py
+        variant = self.cfg.model.vision_model.variant
+        if 'internvl3' in variant.lower():
+            # InternVL3 uses built-in chat templates, no need for conversation.py
+            conv_module = None
+        else:
+            # InternVL2 and older versions use conversation.py
+            # Check if variant is a local path or a HuggingFace repo ID
+            if os.path.isabs(variant) and os.path.exists(variant):
+                # It's a local path, use it directly
+                cache_dir = variant
+            else:
+                # It's a HuggingFace repo ID, download it
+                cache_dir = f"pretrained/{(variant.split('/')[1])}"
+                # get absolute path from workspace dir not working dir
+                cache_dir = to_absolute_path(cache_dir)
+                model_path = f"{cache_dir}/conversation.py"
+                if not os.path.exists(model_path):
+                    from huggingface_hub import snapshot_download
+                    snapshot_download(repo_id=variant, local_dir=cache_dir)
+
+            model_path = f"{cache_dir}/conversation.py"
+
+            #import from file from model_path
+            spec = importlib.util.spec_from_file_location('get_conv_template', model_path)
+            conv_module = importlib.util.module_from_spec(spec)
+            sys.modules['get_conv_template'] = conv_module
+            spec.loader.exec_module(conv_module)
         
         if not hasattr(self, 'tmp_config'):
                 self.tmp_config = AutoConfig.from_pretrained(self.cfg.model.vision_model.variant, trust_remote_code=True)
-                image_size = self.tmp_config.force_image_size or self.tmp_config.vision_config.image_size
+
+                # Handle different model configurations
+                if hasattr(self.tmp_config, 'force_image_size') and self.tmp_config.force_image_size:
+                    # InternVL2 style configuration
+                    image_size = self.tmp_config.force_image_size
+                else:
+                    # InternVL3 style configuration
+                    image_size = self.tmp_config.vision_config.image_size
+                    # Handle both single integer and list formats
+                    if isinstance(image_size, list):
+                        image_size = image_size[0]  # Assume square images, take first dimension
+
                 patch_size = self.tmp_config.vision_config.patch_size
-                
+                # Handle both single integer and list formats for patch_size
+                if isinstance(patch_size, list):
+                    patch_size = patch_size[0]  # Assume square patches, take first dimension
+
                 self.num_image_token = int((image_size // patch_size) ** 2 * (self.tmp_config.downsample_ratio ** 2))
                 
+        IMG_START_TOKEN='<img>'
+        IMG_END_TOKEN='</img>'
+        IMG_CONTEXT_TOKEN='<IMG_CONTEXT>'
+        IMG_TOKEN = '<image>'
+        num_patches_all = 2 # sum(grid_nums)
+
         prompt_batch_list = []
         for idx, conv in enumerate(conv_batch_list):
                 question = questions[idx]
-                if '<image>' not in question:
-                        question = '<image>\n' + question
-                template = conv_module.get_conv_template('internlm2-chat')
-                template_inference = None
-                
-                template_inference = conv_module.get_conv_template('internlm2-chat')
-                for conv_part_idx, conv_part in enumerate(conv):
-                        if conv_part['role'] == 'assistant':
-                                # template.append_message(template.roles[1], conv_part['content'])
-                                template.append_message(template.roles[1], None)
-                        elif conv_part['role'] == 'user':
-                                if conv_part_idx == 0 and '<image>' not in conv_part['content']:
-                                        # add image token
-                                        conv_part['content'] = '<image>\n' + conv_part['content']
-                                template.append_message(template.roles[0], conv_part['content'])
-                        else:
-                                raise ValueError(f"Role {conv_part['role']} not supported")
-                            
-                query = template.get_prompt()
-                # remove system prompt
-                system_prompt = template.system_template.replace('{system_message}', template.system_message) + template.sep
-                query = query.replace(system_prompt, '')
-                
-                IMG_START_TOKEN='<img>'
-                IMG_END_TOKEN='</img>'
-                IMG_CONTEXT_TOKEN='<IMG_CONTEXT>'
-                num_patches_all = 2 # sum(grid_nums)
 
+                if conv_module is None:
+                    # InternVL3: Use tokenizer's built-in chat template
+                    # Prepare conversation for template (with answer)
+                    conv_for_template = []
+                    for conv_part in conv:
+                        content_str = conv_part['content']
+                        if conv_part['role'] == 'user' and IMG_TOKEN not in content_str:
+                            content_str = f"{IMG_TOKEN}\n" + content_str
+                        conv_for_template.append({
+                            'role': conv_part['role'],
+                            'content': content_str
+                        })
+
+                    # Apply chat template with generation prompt (for inference)
+                    query = self.tokenizer.apply_chat_template(conv_for_template, tokenize=False, add_generation_prompt=True)
+
+                else:
+                    # InternVL2: Use conversation.py templates
+                    if '<image>' not in question:
+                            question = '<image>\n' + question
+                    template = conv_module.get_conv_template('internlm2-chat')
+
+                    for conv_part_idx, conv_part in enumerate(conv):
+                            if conv_part['role'] == 'assistant':
+                                    # template.append_message(template.roles[1], conv_part['content'])
+                                    template.append_message(template.roles[1], None)
+                            elif conv_part['role'] == 'user':
+                                    if conv_part_idx == 0 and '<image>' not in conv_part['content']:
+                                            # add image token
+                                            conv_part['content'] = '<image>\n' + conv_part['content']
+                                    template.append_message(template.roles[0], conv_part['content'])
+                            else:
+                                    raise ValueError(f"Role {conv_part['role']} not supported")
+
+                    query = template.get_prompt()
+                    # remove system prompt
+                    system_prompt = template.system_template.replace('{system_message}', template.system_message) + template.sep
+                    query = query.replace(system_prompt, '')
+
+                # Replace <image> with image token placeholders
                 image_tokens = IMG_START_TOKEN + IMG_CONTEXT_TOKEN * self.num_image_token * num_patches_all + IMG_END_TOKEN
-                query = query.replace('<image>', image_tokens, 1)
+                query = query.replace(IMG_TOKEN, image_tokens, 1)
                 prompt_batch_list.append(query)
                 
         prompt_tokenized = self.tokenizer(prompt_batch_list, padding=True, return_tensors="pt", return_offsets_mapping=True, add_special_tokens=False)
@@ -807,6 +862,9 @@ class LingoAgent(autonomous_agent.AutonomousAgent):
         assert route_waypoints.size(0) == 1
         route_waypoints = route_waypoints[0].data.cpu().numpy()
         speed = velocity[0].data.cpu().numpy()
+        # Ensure speed is a scalar for compatibility with numpy operations
+        if speed.ndim > 0:
+            speed = speed.item() if speed.size == 1 else float(speed.flatten()[0])
         speed_waypoints = speed_waypoints[0].data.cpu().numpy()
 
         # m / s required to drive
@@ -817,6 +875,11 @@ class LingoAgent(autonomous_agent.AutonomousAgent):
         brake = ((desired_speed < self.config.brake_speed) or ((speed / desired_speed) > self.config.brake_ratio))
 
         delta = np.clip(desired_speed - speed, 0.0, self.config.clip_delta)
+        # Ensure delta is a scalar for PID controller compatibility
+        if hasattr(delta, 'item'):
+            delta = delta.item()
+        elif hasattr(delta, '__len__') and len(delta) == 1:
+            delta = float(delta[0])
         throttle = self.speed_controller.step(delta)
         throttle = np.clip(throttle, 0.0, self.config.clip_throttle)
         throttle = throttle if not brake else 0.0
@@ -864,7 +927,8 @@ class LingoAgent(autonomous_agent.AutonomousAgent):
 
         del self.model
         del self.config
-        if self.cfg.data_module.encoder == 'llavanext':
+        # Clean up processor if it exists
+        if hasattr(self, 'processor'):
             del self.processor
 
 
