@@ -45,7 +45,7 @@ data_module:
 
 max_epochs: 1
 # val_every_n_epochs: 1
-val_check_interval: 500
+val_check_interval: 1000
 limit_train_batches: 5000  # Limit to 3 batches per epoch (3 * 8 = 24 samples, close to 20)
 limit_val_batches: 1  # Limit to 3 batches per validation (3 * 8 = 24 samples, close to 20)
 

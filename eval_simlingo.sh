@@ -65,12 +65,12 @@ for STEP in 003000; do
     # exp 9
     LOAD_PATH="/mnt/raid12/scratch/simlingo/outputs/2025-09-24/22-25-50/checkpoints/epoch=000-step=${STEP}.ckpt"
     echo "Evaluating: ${LOAD_PATH}"
-    python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
+    HYDRA_FULL_ERROR=1 python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
 
     # exp 10
     LOAD_PATH="/mnt/raid12/scratch/simlingo/outputs/2025-09-24/22-25-43/checkpoints/epoch=000-step=${STEP}.ckpt"
     echo "Evaluating: ${LOAD_PATH}"
-    python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
+    HYDRA_FULL_ERROR=1 python -m simlingo_training.eval load_path=${LOAD_PATH//=/\\=}
 
     echo "Completed step ${STEP}"
     echo "----------------------------------------"
