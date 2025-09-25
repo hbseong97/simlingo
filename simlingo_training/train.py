@@ -61,7 +61,10 @@ def main(cfg: TrainConfig):
         _recursive_=False
         )
 
-    if cfg.checkpoint is not None:
+    # Note: When using DeepSpeed with PyTorch Lightning, we should let Lightning handle
+    # checkpoint loading/resuming automatically rather than manually loading here.
+    # Manual loading can interfere with DeepSpeed's internal state management.
+    if cfg.checkpoint is not None and cfg.strategy != "deepspeed_stage_2":
         if os.path.isdir(cfg.checkpoint):
             state_dict = get_fp32_state_dict_from_zero_checkpoint(cfg.checkpoint)
         else:
@@ -89,6 +92,7 @@ def main(cfg: TrainConfig):
         resume_wandb = True
     elif resume_path is not None and os.path.exists(resume_path) and cfg.resume:
         resume_wandb = True
+    print(f"{resume_wandb=}")
 
     if resume_path is not None and os.path.exists(resume_path) and cfg.resume:
         resume_path = resume_path

@@ -15,6 +15,9 @@ scontrol show job $SLURM_JOB_ID
 
 conda env list
 
+# Activate the simlingo_upgrade environment
+conda activate simlingo_upgrade
+
 pwd
 export CARLA_ROOT=~/software/carla0915/
 export WORK_DIR=/mnt/raid12/scratch/simlingo
@@ -31,4 +34,4 @@ export NCCL_DEBUG=INFO
 export OMP_NUM_THREADS=64 # Limits pytorch to spawn at most num cpus cores threads
 export OPENBLAS_NUM_THREADS=1  # Shuts off numpy multithreading, to avoid threads spawning other threads.
 # export CUDA_LAUNCH_BLOCKING=1
-WANDB__SERVICE_WAIT=300 HYDRA_FULL_ERROR=1 python simlingo_training/train.py experiment=9 data_module.batch_size=8 gpus=8 name=simlingo_baseline
+WANDB__SERVICE_WAIT=300 HYDRA_FULL_ERROR=1 python simlingo_training/train.py experiment=exp9 data_module.batch_size=8 gpus=8 name=simlingo_baseline
