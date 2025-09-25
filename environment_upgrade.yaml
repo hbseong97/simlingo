@@ -139,7 +139,7 @@ dependencies:
     - psutil
     - py
     - py-cpuinfo
-    - py-trees
+    - py-trees==0.8.3
     - pyarrow
     - pycparser
     - pydantic
